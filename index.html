@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="大腦排毒作息">
+<meta name="theme-color" content="#1a1a2e">
+<title>大腦排毒作息</title>
+<link rel="manifest" href="manifest.json">
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, getDocs, orderBy, query, limit }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDDQePBU6tPxHANhnocteQW_aiEcr-h2Zg",
+    authDomain: "gen-lang-client-07374444-27e2e.firebaseapp.com",
+    projectId: "gen-lang-client-07374444-27e2e",
+    storageBucket: "gen-lang-client-07374444-27e2e.firebasestorage.app",
+    messagingSenderId: "841824332456",
+    appId: "1:841824332456:web:e929f245eb2a0a59e0b09d",
+    measurementId: "G-X61TYE4TY7"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // 儲存每日分數到 Firestore
+  window.saveScoreToFirebase = async (dateKey, done, total, sleepHours) => {
+    try {
+      const score = Math.round(done / total * 100);
+      await setDoc(doc(db, "brain_detox_scores", dateKey), {
+        date: dateKey,
+        done,
+        total,
+        score,
+        sleepHours: sleepHours || null,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      console.log('✅ 分數已同步 Firebase:', score);
+    } catch(e) { console.error('Firebase 寫入失敗:', e); }
+  };
+
+  // 讀取歷史分數（近30天）供排行榜用
+  window.loadFirebaseHistory = async () => {
+    try {
+      const q = query(collection(db, "brain_detox_scores"), orderBy("date", "desc"), limit(30));
+      const snap = await getDocs(q);
+      const result = {};
+      snap.forEach(d => { result[d.id] = d.data(); });
+      window._fbHistory = result;
+      if (window.renderFirebaseHistory) window.renderFirebaseHistory(result);
+    } catch(e) { console.error('Firebase 讀取失敗:', e); }
+  };
+
+  // 頁面載入時拉取歷史
+  window.loadFirebaseHistory();
+</script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #0f0f1a;
+    --card: #1a1a2e;
+    --card2: #16213e;
+    --accent: #4fc3f7;
+    --accent2: #81d4fa;
+    --green: #4caf50;
+    --yellow: #ffd54f;
+    --orange: #ff8a65;
+    --purple: #ce93d8;
+    --red: #ef5350;
+    --text: #e0e0e0;
+    --text2: #9e9e9e;
+    --border: rgba(255,255,255,0.08);
+  }
+
+  body {
+    font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }
+
+  /* 頂部 */
+  .header {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    padding: 50px 20px 20px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 { font-size: 20px; font-weight: 700; letter-spacing: 2px; color: var(--accent); }
+  .header .date { font-size: 13px; color: var(--text2); margin-top: 4px; }
+  .progress-ring-wrap { display: flex; justify-content: center; align-items: center; flex-direction: column; margin: 16px 0 8px; }
+  .progress-ring { position: relative; width: 100px; height: 100px; }
+  .progress-ring svg { transform: rotate(-90deg); }
+  .progress-ring circle { fill: none; stroke-width: 8; }
+  .progress-ring .bg { stroke: rgba(255,255,255,0.1); }
+  .progress-ring .fg { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
+  .progress-ring .pct {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 22px; font-weight: 700; color: var(--accent);
+  }
+  .progress-label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  /* 導航 */
+  .nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    display: flex; z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    padding: 10px 4px; border: none; background: none; color: var(--text2);
+    font-size: 10px; cursor: pointer; transition: color 0.2s;
+  }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn svg { margin-bottom: 3px; }
+
+  /* 頁面 */
+  .page { display: none; padding: 16px; }
+  .page.active { display: block; }
+
+  /* 日程卡片 */
+  .section-title {
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text2); margin: 16px 0 8px 4px;
+  }
+
+  .task-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px;
+    cursor: pointer; transition: all 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .task-card.done { opacity: 0.55; }
+  .task-card.done::after {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background: var(--green); border-radius: 3px 0 0 3px;
+  }
+  .task-card:active { transform: scale(0.98); }
+
+  .task-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+  }
+  .task-info { flex: 1; min-width: 0; }
+  .task-time { font-size: 11px; color: var(--text2); margin-bottom: 2px; }
+  .task-name { font-size: 15px; font-weight: 600; color: var(--text); }
+  .task-desc { font-size: 12px; color: var(--text2); margin-top: 2px; line-height: 1.4; }
+
+  .check-btn {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid var(--border); background: none;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+  }
+  .check-btn.checked { background: var(--green); border-color: var(--green); }
+  .check-btn svg { opacity: 0; transition: opacity 0.2s; }
+  .check-btn.checked svg { opacity: 1; }
+
+  /* 現在應該做什麼 */
+  .now-card {
+    background: linear-gradient(135deg, #0d47a1, #1565c0);
+    border-radius: 20px; padding: 20px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(79,195,247,0.3);
+  }
+  .now-card .label { font-size: 11px; letter-spacing: 1px; color: var(--accent2); margin-bottom: 6px; }
+  .now-card .task { font-size: 20px; font-weight: 700; }
+  .now-card .sub { font-size: 13px; color: var(--accent2); margin-top: 4px; }
+  .now-card .tip { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 10px; line-height: 1.5; background: rgba(0,0,0,0.2); border-radius: 10px; padding: 10px; }
+
+  /* 睡眠追蹤 */
+  .sleep-card {
+    background: var(--card); border-radius: 16px;
+    padding: 16px; border: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .sleep-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 14px; color: var(--accent); }
+  .sleep-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .sleep-input-group { flex: 1; }
+  .sleep-input-group label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+  .sleep-input-group input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; color: var(--text); font-size: 15px;
+    outline: none; -webkit-appearance: none;
+  }
+  .save-sleep-btn {
+    width: 100%; background: linear-gradient(135deg, #1565c0, #0d47a1);
+    border: none; border-radius: 12px; padding: 13px;
+    color: white; font-size: 15px; font-weight: 600; cursor: pointer;
+    margin-top: 4px;
+  }
+
+  .stat-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .stat-box {
+    flex: 1; background: var(--card); border-radius: 14px;
+    padding: 14px 12px; border: 1px solid var(--border); text-align: center;
+  }
+  .stat-box .val { font-size: 22px; font-weight: 700; color: var(--accent); }
+  .stat-box .unit { font-size: 11px; color: var(--text2); }
+  .stat-box .lbl { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  /* 睡眠週歷史 */
+  .week-bars { display: flex; align-items: flex-end; gap: 6px; height: 80px; padding: 0 4px; margin-top: 10px; }
+  .day-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+  .day-bar-bg { flex: 1; width: 100%; background: rgba(255,255,255,0.06); border-radius: 6px; position: relative; overflow: hidden; }
+  .day-bar-fill { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 6px; transition: height 0.6s ease; }
+  .day-bar-fill.good { background: var(--green); }
+  .day-bar-fill.ok { background: var(--yellow); }
+  .day-bar-fill.bad { background: var(--red); }
+  .day-label { font-size: 10px; color: var(--text2); }
+
+  /* 健康提示 */
+  .tip-card {
+    background: var(--card); border-radius: 16px;
+    padding: 16px; border: 1px solid var(--border); margin-bottom: 10px;
+  }
+  .tip-card .tip-icon { font-size: 28px; margin-bottom: 8px; }
+  .tip-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--accent); }
+  .tip-card p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+  /* 通知設定 */
+  .notif-row {
+    background: var(--card); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 8px;
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .notif-info { flex: 1; }
+  .notif-name { font-size: 14px; font-weight: 500; }
+  .notif-time { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .toggle {
+    width: 44px; height: 26px; background: var(--border);
+    border-radius: 13px; position: relative; cursor: pointer;
+    transition: background 0.2s; border: none; flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 20px; height: 20px; background: white; border-radius: 50%;
+    transition: left 0.2s;
+  }
+  .toggle.on::after { left: 21px; }
+
+  .notif-grant-btn {
+    width: 100%; background: linear-gradient(135deg, #4a148c, #6a1b9a);
+    border: none; border-radius: 14px; padding: 14px;
+    color: white; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 16px;
+  }
+
+  /* 動畫 */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+  .now-dot { display: inline-block; width: 8px; height: 8px; background: #69f0ae; border-radius: 50%; margin-right: 6px; animation: pulse 2s infinite; }
+
+  /* 連續打卡徽章 */
+  .streak-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: linear-gradient(135deg, #f57f17, #ff8f00);
+    border-radius: 20px; padding: 6px 14px; font-size: 13px; font-weight: 600;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🧠 大腦排毒作息</h1>
+  <div class="date" id="headerDate"></div>
+  <div class="progress-ring-wrap">
+    <div class="progress-ring">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle class="bg" cx="50" cy="50" r="42"/>
+        <circle class="fg" id="progressCircle" cx="50" cy="50" r="42" stroke-dasharray="264" stroke-dashoffset="264"/>
+      </svg>
+      <div class="pct" id="progressPct">0%</div>
+    </div>
+    <div class="progress-label">今日完成率</div>
+    <div class="streak-badge" id="streakBadge">🔥 連續 <span id="streakDays">0</span> 天</div>
+  </div>
+</div>
+
+<!-- 導航 -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="showPage('today')" id="nav-today">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+    今日
+  </button>
+  <button class="nav-btn" onclick="showPage('sleep')" id="nav-sleep">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+    睡眠
+  </button>
+  <button class="nav-btn" onclick="showPage('tips')" id="nav-tips">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+    健康
+  </button>
+  <button class="nav-btn" onclick="showPage('notify')" id="nav-notify">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+    提醒
+  </button>
+</nav>
+
+<!-- 今日頁 -->
+<div class="page active" id="page-today">
+  <div class="now-card" id="nowCard">
+    <div class="label"><span class="now-dot"></span>現在應該做</div>
+    <div class="task" id="nowTask">—</div>
+    <div class="sub" id="nowTime">—</div>
+    <div class="tip" id="nowTip"></div>
+  </div>
+
+  <div class="section-title">🌅 清晨</div>
+  <div id="tasks-morning"></div>
+
+  <div class="section-title">☀️ 中午</div>
+  <div id="tasks-noon"></div>
+
+  <div class="section-title">🌆 傍晚</div>
+  <div id="tasks-evening"></div>
+
+  <div class="section-title">🌃 夜間</div>
+  <div id="tasks-night"></div>
+</div>
+
+<!-- 睡眠頁 -->
+<div class="page" id="page-sleep">
+  <div class="sleep-card">
+    <h3>📊 今晚睡眠記錄</h3>
+    <div class="sleep-row">
+      <div class="sleep-input-group">
+        <label>入睡時間</label>
+        <input type="time" id="sleepStart" value="23:30">
+      </div>
+      <div class="sleep-input-group">
+        <label>起床時間</label>
+        <input type="time" id="sleepEnd" value="06:00">
+      </div>
+    </div>
+    <button class="save-sleep-btn" onclick="saveSleep()">儲存今日睡眠</button>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-box">
+      <div class="val" id="avgSleep">—</div>
+      <div class="unit">小時</div>
+      <div class="lbl">7天平均</div>
+    </div>
+    <div class="stat-box">
+      <div class="val" id="lastSleep">—</div>
+      <div class="unit">小時</div>
+      <div class="lbl">昨晚睡眠</div>
+    </div>
+    <div class="stat-box">
+      <div class="val" id="sleepDebt">—</div>
+      <div class="unit">小時</div>
+      <div class="lbl">累計睡眠債</div>
+    </div>
+  </div>
+
+  <div class="sleep-card">
+    <h3>📈 近7天睡眠</h3>
+    <div class="week-bars" id="weekBars"></div>
+    <div style="display:flex;gap:12px;margin-top:12px;font-size:11px;color:var(--text2);">
+      <span>🟢 ≥6.5h 達標</span>
+      <span>🟡 5.5-6.5h 普通</span>
+      <span>🔴 &lt;5.5h 不足</span>
+    </div>
+  </div>
+
+  <div class="sleep-card">
+    <h3 style="display:flex;justify-content:space-between;align-items:center">
+      ☁️ 雲端歷史記錄（近14天）
+      <button onclick="if(window.loadFirebaseHistory)window.loadFirebaseHistory()" style="font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--accent);border-radius:8px;padding:4px 10px;cursor:pointer">重新整理</button>
+    </h3>
+    <div id="fbHistory"><p style="color:var(--text2);font-size:13px;text-align:center;padding:12px">載入中…</p></div>
+  </div>
+</div>
+
+<!-- 健康提示頁 -->
+<div class="page" id="page-tips">
+  <div class="tip-card">
+    <div class="tip-icon">🧠</div>
+    <h3>大腦類淋巴排毒原理</h3>
+    <p>大腦清除 Tau 蛋白與 Aβ 蛋白的「類淋巴系統」，必須在連續且深層的慢波睡眠中才能高效運作。每晚至少 6.5 小時核心睡眠，才能完成 1-2 個完整排毒週期。</p>
+  </div>
+  <div class="tip-card">
+    <div class="tip-icon">☀️</div>
+    <h3>早晨陽光與生理時鐘</h3>
+    <p>醒來後讓自然光照射眼睛 5-10 分鐘，能精準設定晝夜節律，讓大腦停止分泌褪黑激素，讓您整天神清氣爽。這是最天然且免費的「鬧鐘」。</p>
+  </div>
+  <div class="tip-card">
+    <div class="tip-icon">💪</div>
+    <h3>運動黃金時段（7:30-9:00）</h3>
+    <p>這個時段運動能有效活化大腦血流，促進神經滋養因子（BDNF）分泌。BDNF 就像大腦的「肥料」，幫助神經元生長與連結。</p>
+  </div>
+  <div class="tip-card">
+    <div class="tip-icon">😴</div>
+    <h3>午睡上限 30 分鐘</h3>
+    <p>超過 30 分鐘會進入深層睡眠，醒來產生「睡眠慣性」反而昏沉，還會削減夜晚入睡動力。設定鬧鐘，精準 20-30 分鐘的輕睡眠最理想。</p>
+  </div>
+  <div class="tip-card">
+    <div class="tip-icon">📱</div>
+    <h3>睡前遠離藍光</h3>
+    <p>睡前一小時停止使用手機、電視、電腦。藍光會嚴重抑制褪黑激素分泌，導致深層睡眠比例減少，大腦排毒效率下降。可改做拉伸或閱讀紙本書。</p>
+  </div>
+  <div class="tip-card">
+    <div class="tip-icon">💧</div>
+    <h3>運動後補充水分與蛋白質</h3>
+    <p>完成 90 分鐘訓練後，務必補充足夠水分（至少 500ml）與優質蛋白質。60 歲後肌肉修復速度下降，充足蛋白質對維持肌肉量至關重要。</p>
+  </div>
+  <div class="tip-card">
+    <div class="tip-icon">🔥</div>
+    <h3>三個微調心法</h3>
+    <p>1. 用「醒來體感」當指標 — 清爽感增加代表睡眠債正在改善。<br>2. 無晚班的日子可跳過傍晚小睡，把睡眠壓力留到夜晚。<br>3. 入睡時間每幾天提早 15 分鐘，循序漸進調整生理時鐘。</p>
+  </div>
+</div>
+
+<!-- 提醒設定頁 -->
+<div class="page" id="page-notify">
+  <button class="notif-grant-btn" onclick="requestNotif()" id="notifBtn">🔔 開啟通知提醒</button>
+  <div id="notifList"></div>
+</div>
+
+<script>
+// ───────────────────────────────────────
+// 任務資料
+// ───────────────────────────────────────
+const TASKS = [
+  {
+    id: 'sun', group: 'morning', time: '06:00', endTime: '06:15',
+    icon: '☀️', color: '#fff176', name: '晨光沐浴',
+    desc: '拉開窗簾，自然光照眼睛 5-10 分鐘',
+    tip: '精準設定生理時鐘，讓大腦停止分泌褪黑激素，開啟清醒的一天。'
+  },
+  {
+    id: 'exercise', group: 'morning', time: '07:30', endTime: '09:00',
+    icon: '🏃', color: '#a5d6a7', name: '核心運動',
+    desc: '肌耐力訓練 + 超慢跑（90 分鐘）',
+    tip: '這個時段運動能促進 BDNF 分泌，是大腦的天然肥料，預防神經退化。'
+  },
+  {
+    id: 'water', group: 'morning', time: '09:00', endTime: '09:30',
+    icon: '💧', color: '#80deea', name: '補水與蛋白質',
+    desc: '運動後補 500ml 水 + 優質蛋白質',
+    tip: '60歲後肌肉修復速度下降，充足蛋白質對維持肌肉量至關重要。'
+  },
+  {
+    id: 'nap', group: 'noon', time: '13:30', endTime: '14:00',
+    icon: '😴', color: '#ce93d8', name: '精準午睡',
+    desc: '設好鬧鐘，上限 30 分鐘',
+    tip: '超過 30 分鐘會進入深層睡眠，醒來反而昏沉，還會削減夜晚入睡動力。'
+  },
+  {
+    id: 'evening', group: 'evening', time: '18:00', endTime: '18:20',
+    icon: '🌆', color: '#ffcc80', name: '傍晚閉目養神',
+    desc: '晚班日適用，15-20 分鐘即可',
+    tip: '傍晚睡太久是生理時鐘往後移的關鍵原因。無晚班日可跳過此項。'
+  },
+  {
+    id: 'noscreen', group: 'night', time: '22:30', endTime: '23:30',
+    icon: '📵', color: '#ef9a9a', name: '遠離藍光',
+    desc: '關閉手機、電視，做拉伸或冥想',
+    tip: '藍光嚴重抑制褪黑激素分泌，讓深層睡眠比例變少，大腦排毒效率下降。'
+  },
+  {
+    id: 'sleep', group: 'night', time: '23:30', endTime: '06:00',
+    icon: '🌙', color: '#90caf9', name: '核心夜間睡眠',
+    desc: '目標 6.5 小時 — 大腦排毒黃金期',
+    tip: '這多出來的一小時，讓類淋巴系統多跑 1-2 個完整排毒週期，預防 Tau 蛋白堆積。'
+  },
+];
+
+// ───────────────────────────────────────
+// 工具
+// ───────────────────────────────────────
+const todayKey = () => new Date().toISOString().slice(0,10);
+const store = {
+  get: k => { try { return JSON.parse(localStorage.getItem(k)) } catch(e) { return null } },
+  set: (k, v) => localStorage.setItem(k, JSON.stringify(v))
+};
+
+function getDoneSet() {
+  return new Set(store.get('done_' + todayKey()) || []);
+}
+function toggleDone(id) {
+  const s = getDoneSet();
+  if (s.has(id)) s.delete(id); else s.add(id);
+  store.set('done_' + todayKey(), [...s]);
+  renderAll();
+  const sleep = (store.get('sleep_history') || {})[todayKey()];
+  if (window.saveScoreToFirebase) window.saveScoreToFirebase(todayKey(), s.size, TASKS.length, sleep);
+}
+
+function getStreak() {
+  let streak = 0;
+  const d = new Date();
+  for (let i = 0; i < 30; i++) {
+    const k = d.toISOString().slice(0,10);
+    const done = store.get('done_' + k) || [];
+    if (i === 0 && done.length === 0) { d.setDate(d.getDate()-1); continue; }
+    if (done.length >= Math.ceil(TASKS.length * 0.7)) streak++;
+    else break;
+    d.setDate(d.getDate()-1);
+  }
+  return streak;
+}
+
+// ───────────────────────────────────────
+// 渲染
+// ───────────────────────────────────────
+function renderTasks() {
+  const done = getDoneSet();
+  const groups = { morning: [], noon: [], evening: [], night: [] };
+  TASKS.forEach(t => groups[t.group].push(t));
+
+  Object.entries(groups).forEach(([g, tasks]) => {
+    const el = document.getElementById('tasks-' + g);
+    el.innerHTML = tasks.map(t => `
+      <div class="task-card ${done.has(t.id) ? 'done' : ''}" onclick="toggleDone('${t.id}')">
+        <div class="task-icon" style="background:${t.color}22">${t.icon}</div>
+        <div class="task-info">
+          <div class="task-time">${t.time} - ${t.endTime}</div>
+          <div class="task-name">${t.name}</div>
+          <div class="task-desc">${t.desc}</div>
+        </div>
+        <button class="check-btn ${done.has(t.id) ? 'checked' : ''}" onclick="event.stopPropagation();toggleDone('${t.id}')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+        </button>
+      </div>
+    `).join('');
+  });
+}
+
+function renderProgress() {
+  const done = getDoneSet();
+  const pct = Math.round(done.size / TASKS.length * 100);
+  const r = 42, c = 2 * Math.PI * r;
+  document.getElementById('progressCircle').style.strokeDashoffset = c - (c * pct / 100);
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('streakDays').textContent = getStreak();
+}
+
+function renderNow() {
+  const now = new Date();
+  const hm = now.getHours() * 60 + now.getMinutes();
+  const toMin = s => { const [h,m]=s.split(':').map(Number); return h*60+m; };
+
+  let current = null;
+  for (const t of TASKS) {
+    const start = toMin(t.time);
+    let end = toMin(t.endTime);
+    if (end < start) end += 1440; // 跨午夜
+    const curAdj = (t.id === 'sleep' && hm < 12) ? hm + 1440 : hm;
+    if (curAdj >= start && curAdj < end) { current = t; break; }
+  }
+
+  if (!current) {
+    // 找下一個
+    let next = null, minDiff = 9999;
+    for (const t of TASKS) {
+      let diff = toMin(t.time) - hm;
+      if (diff < 0) diff += 1440;
+      if (diff < minDiff) { minDiff = diff; next = t; }
+    }
+    current = next;
+    const h = Math.floor(minDiff/60), m = minDiff%60;
+    document.getElementById('nowTask').textContent = next.icon + ' ' + next.name;
+    document.getElementById('nowTime').textContent = `${h > 0 ? h+'小時' : ''}${m}分鐘後（${next.time}）`;
+    document.getElementById('nowTip').textContent = next.tip;
+  } else {
+    document.getElementById('nowTask').textContent = current.icon + ' ' + current.name;
+    document.getElementById('nowTime').textContent = `進行中 ${current.time} - ${current.endTime}`;
+    document.getElementById('nowTip').textContent = current.tip;
+  }
+}
+
+function renderDate() {
+  const d = new Date();
+  const days = ['日','一','二','三','四','五','六'];
+  document.getElementById('headerDate').textContent =
+    `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${days[d.getDay()]}`;
+}
+
+function renderSleep() {
+  const history = store.get('sleep_history') || {};
+  const keys = Object.keys(history).sort().slice(-7);
+
+  // 統計
+  if (keys.length > 0) {
+    const vals = keys.map(k => history[k]);
+    const avg = (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
+    document.getElementById('avgSleep').textContent = avg;
+
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
+    const yk = yesterday.toISOString().slice(0,10);
+    document.getElementById('lastSleep').textContent = history[yk] ? history[yk].toFixed(1) : '—';
+
+    const debt = vals.reduce((a,b) => a + Math.max(0, 6.5 - b), 0);
+    document.getElementById('sleepDebt').textContent = debt.toFixed(1);
+  }
+
+  // 週圖表
+  const bars = document.getElementById('weekBars');
+  const days7 = [];
+  for (let i=6; i>=0; i--) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    days7.push({ key: d.toISOString().slice(0,10), day: ['日','一','二','三','四','五','六'][d.getDay()] });
+  }
+  bars.innerHTML = days7.map(({key, day}) => {
+    const h = history[key] || 0;
+    const maxH = 9; const pct = Math.min(h / maxH * 100, 100);
+    const cls = h >= 6.5 ? 'good' : h >= 5.5 ? 'ok' : h > 0 ? 'bad' : '';
+    return `
+      <div class="day-bar-wrap">
+        <div class="day-bar-bg">
+          <div class="day-bar-fill ${cls}" style="height:${pct}%"></div>
+        </div>
+        <div class="day-label">${day}</div>
+      </div>`;
+  }).join('');
+}
+
+function saveSleep() {
+  const s = document.getElementById('sleepStart').value; // HH:MM
+  const e = document.getElementById('sleepEnd').value;
+  if (!s || !e) return;
+  const toMin = v => { const [h,m]=v.split(':').map(Number); return h*60+m; };
+  let diff = toMin(e) - toMin(s);
+  if (diff < 0) diff += 1440;
+  const hours = +(diff/60).toFixed(2);
+
+  const history = store.get('sleep_history') || {};
+  history[todayKey()] = hours;
+  store.set('sleep_history', history);
+
+  // 標記睡眠任務完成
+  if (hours >= 5) {
+    const done = getDoneSet();
+    done.add('sleep');
+    store.set('done_' + todayKey(), [...done]);
+  }
+
+  renderSleep();
+  renderProgress();
+  const done = getDoneSet();
+  if (window.saveScoreToFirebase) window.saveScoreToFirebase(todayKey(), done.size, TASKS.length, hours);
+  alert(`儲存成功！今晚睡了 ${hours.toFixed(1)} 小時${hours >= 6.5 ? ' 🎉 達標！' : hours >= 5.5 ? ' 👍 還不錯' : ' 😴 明天繼續加油'}`);
+}
+
+// ───────────────────────────────────────
+// Firebase 歷史渲染
+// ───────────────────────────────────────
+window.renderFirebaseHistory = function(history) {
+  const el = document.getElementById('fbHistory');
+  if (!el) return;
+  const days = Object.keys(history).sort().reverse().slice(0, 14);
+  if (days.length === 0) { el.innerHTML = '<p style="color:var(--text2);font-size:13px;text-align:center;padding:12px">尚無雲端記錄</p>'; return; }
+  el.innerHTML = days.map(d => {
+    const r = history[d];
+    const bar = r.score;
+    const col = bar >= 80 ? 'var(--green)' : bar >= 50 ? 'var(--yellow)' : 'var(--red)';
+    const sleepTxt = r.sleepHours ? `😴 ${parseFloat(r.sleepHours).toFixed(1)}h` : '';
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text2);width:70px;flex-shrink:0">${d.slice(5)}</div>
+        <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:6px;height:8px;overflow:hidden">
+          <div style="height:100%;width:${bar}%;background:${col};border-radius:6px;transition:width 0.4s"></div>
+        </div>
+        <div style="font-size:12px;color:${col};width:36px;text-align:right;flex-shrink:0">${bar}%</div>
+        <div style="font-size:11px;color:var(--text2);width:46px;flex-shrink:0">${sleepTxt}</div>
+      </div>`;
+  }).join('');
+};
+
+// ───────────────────────────────────────
+// 通知
+// ───────────────────────────────────────
+const NOTIF_TASKS = TASKS.map(t => ({ id: t.id, name: t.name, time: t.time, icon: t.icon }));
+
+function renderNotifList() {
+  const enabled = store.get('notif_enabled') || {};
+  document.getElementById('notifList').innerHTML = NOTIF_TASKS.map(t => `
+    <div class="notif-row">
+      <div class="notif-info">
+        <div class="notif-name">${t.icon} ${t.name}</div>
+        <div class="notif-time">${t.time}</div>
+      </div>
+      <button class="toggle ${enabled[t.id] ? 'on' : ''}" onclick="toggleNotif('${t.id}')"></button>
+    </div>
+  `).join('');
+}
+
+function toggleNotif(id) {
+  const enabled = store.get('notif_enabled') || {};
+  enabled[id] = !enabled[id];
+  store.set('notif_enabled', enabled);
+  renderNotifList();
+  scheduleNotifications();
+}
+
+async function requestNotif() {
+  if (!('Notification' in window)) { alert('此瀏覽器不支援通知'); return; }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    document.getElementById('notifBtn').textContent = '✅ 通知已開啟';
+    document.getElementById('notifBtn').style.background = 'linear-gradient(135deg,#1b5e20,#2e7d32)';
+    scheduleNotifications();
+  } else {
+    alert('請在瀏覽器設定中允許通知');
+  }
+}
+
+function scheduleNotifications() {
+  if (Notification.permission !== 'granted') return;
+  const enabled = store.get('notif_enabled') || {};
+  const now = new Date();
+
+  NOTIF_TASKS.forEach(t => {
+    if (!enabled[t.id]) return;
+    const [h, m] = t.time.split(':').map(Number);
+    const target = new Date();
+    target.setHours(h, m, 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1);
+    const delay = target - now;
+    setTimeout(() => {
+      new Notification('🧠 大腦排毒作息', {
+        body: `${t.icon} 現在是 ${t.time}，該進行：${t.name}`,
+        icon: '/brain-detox-routine/icon.png',
+        badge: '/brain-detox-routine/icon.png',
+        tag: t.id,
+      });
+    }, delay);
+  });
+}
+
+// ───────────────────────────────────────
+// 頁面切換
+// ───────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  if (name === 'sleep') renderSleep();
+  if (name === 'notify') renderNotifList();
+}
+
+// ───────────────────────────────────────
+// 初始化
+// ───────────────────────────────────────
+function renderAll() {
+  renderDate();
+  renderTasks();
+  renderProgress();
+  renderNow();
+}
+
+renderAll();
+setInterval(renderNow, 60000);
+
+// 若通知已授權，重排通知
+if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+  scheduleNotifications();
+  document.getElementById('notifBtn').textContent = '✅ 通知已開啟';
+  document.getElementById('notifBtn').style.background = 'linear-gradient(135deg,#1b5e20,#2e7d32)';
+}
+</script>
+</body>
+</html>
