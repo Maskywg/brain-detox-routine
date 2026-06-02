@@ -1,0 +1,11 @@
+{
+  "name": "大腦排毒作息",
+  "short_name": "大腦排毒",
+  "start_url": "/brain-detox-routine/",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    { "src": "icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
