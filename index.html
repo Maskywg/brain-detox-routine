@@ -55,6 +55,17 @@
     } catch(e) { console.error('Firebase 讀取失敗:', e); }
   };
 
+  // 儲存額外運動到 Firestore
+  window.saveExtraToFirebase = async (dateKey, list) => {
+    try {
+      const totalMin = list.reduce((a,b) => a+b.min, 0);
+      await setDoc(doc(db, "brain_detox_extra", dateKey), {
+        date: dateKey, list, totalMin,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch(e) { console.error('Firebase extra 寫入失敗:', e); }
+  };
+
   // 頁面載入時拉取歷史
   window.loadFirebaseHistory();
 </script>
@@ -259,6 +270,25 @@
     color: white; font-size: 15px; font-weight: 600; cursor: pointer; margin-bottom: 16px;
   }
 
+  /* 強度按鈕 */
+  .intensity-btn {
+    flex:1; padding:8px 4px; border-radius:10px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text2); font-size:12px; cursor:pointer; transition:all 0.2s;
+  }
+  .intensity-btn.active { border-color:var(--accent); color:var(--accent); background:rgba(79,195,247,0.1); }
+
+  /* 運動記錄卡 */
+  .extra-card {
+    background:var(--card); border-radius:14px; padding:14px 16px;
+    margin-bottom:8px; border:1px solid var(--border);
+    display:flex; align-items:center; gap:12px;
+  }
+  .extra-card .ex-icon { font-size:28px; }
+  .extra-card .ex-info { flex:1; }
+  .extra-card .ex-name { font-size:15px; font-weight:600; }
+  .extra-card .ex-meta { font-size:12px; color:var(--text2); margin-top:2px; }
+  .extra-card .ex-del { background:none; border:none; color:var(--text2); font-size:18px; cursor:pointer; padding:4px; }
+
   /* 動畫 */
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
   .now-dot { display: inline-block; width: 8px; height: 8px; background: #69f0ae; border-radius: 50%; margin-right: 6px; animation: pulse 2s infinite; }
@@ -303,6 +333,10 @@
   <button class="nav-btn" onclick="showPage('tips')" id="nav-tips">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
     健康
+  </button>
+  <button class="nav-btn" onclick="showPage('extra')" id="nav-extra">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg>
+    運動
   </button>
   <button class="nav-btn" onclick="showPage('notify')" id="nav-notify">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
@@ -422,6 +456,44 @@
     <div class="tip-icon">🔥</div>
     <h3>三個微調心法</h3>
     <p>1. 用「醒來體感」當指標 — 清爽感增加代表睡眠債正在改善。<br>2. 無晚班的日子可跳過傍晚小睡，把睡眠壓力留到夜晚。<br>3. 入睡時間每幾天提早 15 分鐘，循序漸進調整生理時鐘。</p>
+  </div>
+</div>
+
+<!-- 額外運動頁 -->
+<div class="page" id="page-extra">
+  <div class="sleep-card">
+    <h3>➕ 新增額外運動</h3>
+    <div class="sleep-row">
+      <div class="sleep-input-group" style="flex:2">
+        <label>運動項目</label>
+        <input type="text" id="extraName" placeholder="例：游泳、瑜伽、爬山" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:15px;outline:none">
+      </div>
+      <div class="sleep-input-group" style="flex:1">
+        <label>時間（分鐘）</label>
+        <input type="number" id="extraMin" placeholder="30" min="1" max="300" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:15px;outline:none">
+      </div>
+    </div>
+    <div class="sleep-input-group" style="margin-bottom:10px">
+      <label>強度</label>
+      <div style="display:flex;gap:8px;margin-top:6px" id="intensityBtns">
+        <button class="intensity-btn active" data-val="低" onclick="selectIntensity(this)">🟢 低強度</button>
+        <button class="intensity-btn" data-val="中" onclick="selectIntensity(this)">🟡 中強度</button>
+        <button class="intensity-btn" data-val="高" onclick="selectIntensity(this)">🔴 高強度</button>
+      </div>
+    </div>
+    <div class="sleep-input-group" style="margin-bottom:10px">
+      <label>備註（選填）</label>
+      <input type="text" id="extraNote" placeholder="感覺如何？心率？" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:15px;outline:none">
+    </div>
+    <button class="save-sleep-btn" onclick="saveExtraExercise()" style="background:linear-gradient(135deg,#1b5e20,#2e7d32)">✅ 記錄這次運動</button>
+  </div>
+
+  <div class="section-title">今日額外運動</div>
+  <div id="todayExtra"></div>
+
+  <div class="sleep-card" style="margin-top:10px">
+    <h3>📅 近7天額外運動</h3>
+    <div id="extraHistory"></div>
   </div>
 </div>
 
@@ -658,6 +730,111 @@ function saveSleep() {
 }
 
 // ───────────────────────────────────────
+// 額外運動
+// ───────────────────────────────────────
+const EXERCISE_ICONS = { '游泳':'🏊','跑步':'🏃','瑜伽':'🧘','爬山':'🏔️','騎車':'🚴','球類':'⚽','健走':'🚶','重訓':'🏋️','伸展':'🤸', '其他':'💪' };
+
+function getExIcon(name) {
+  for (const [k,v] of Object.entries(EXERCISE_ICONS)) if (name.includes(k)) return v;
+  return '💪';
+}
+
+let currentIntensity = '低';
+function selectIntensity(btn) {
+  document.querySelectorAll('.intensity-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentIntensity = btn.dataset.val;
+}
+
+function saveExtraExercise() {
+  const name = document.getElementById('extraName').value.trim();
+  const min = parseInt(document.getElementById('extraMin').value);
+  const note = document.getElementById('extraNote').value.trim();
+  if (!name) { alert('請輸入運動項目'); return; }
+  if (!min || min < 1) { alert('請輸入運動時間'); return; }
+
+  const record = {
+    id: Date.now(),
+    name, min, note,
+    intensity: currentIntensity,
+    icon: getExIcon(name),
+    time: new Date().toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'}),
+    date: todayKey()
+  };
+
+  const list = store.get('extra_' + todayKey()) || [];
+  list.push(record);
+  store.set('extra_' + todayKey(), list);
+
+  // 同步到 Firebase
+  if (window.saveExtraToFirebase) window.saveExtraToFirebase(todayKey(), list);
+
+  // 清空表單
+  document.getElementById('extraName').value = '';
+  document.getElementById('extraMin').value = '';
+  document.getElementById('extraNote').value = '';
+
+  renderExtraToday();
+  renderExtraHistory();
+  alert(`✅ 記錄成功！${record.icon} ${name} ${min} 分鐘`);
+}
+
+function deleteExtra(id) {
+  const list = (store.get('extra_' + todayKey()) || []).filter(r => r.id !== id);
+  store.set('extra_' + todayKey(), list);
+  if (window.saveExtraToFirebase) window.saveExtraToFirebase(todayKey(), list);
+  renderExtraToday();
+  renderExtraHistory();
+}
+
+function renderExtraToday() {
+  const list = store.get('extra_' + todayKey()) || [];
+  const el = document.getElementById('todayExtra');
+  if (!el) return;
+  if (list.length === 0) {
+    el.innerHTML = '<p style="color:var(--text2);font-size:13px;text-align:center;padding:16px">今天還沒有額外運動記錄</p>';
+    return;
+  }
+  const totalMin = list.reduce((a,b) => a+b.min, 0);
+  el.innerHTML = `
+    <div style="background:linear-gradient(135deg,#1b5e20,#2e7d32);border-radius:14px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:13px;color:rgba(255,255,255,0.8)">今日額外運動總計</div>
+      <div style="font-size:20px;font-weight:700">${totalMin} <span style="font-size:12px;font-weight:400">分鐘</span></div>
+    </div>
+    ${list.map(r => `
+      <div class="extra-card">
+        <div class="ex-icon">${r.icon}</div>
+        <div class="ex-info">
+          <div class="ex-name">${r.name}</div>
+          <div class="ex-meta">${r.time} ・ ${r.min}分鐘 ・ ${r.intensity}強度${r.note ? ' ・ ' + r.note : ''}</div>
+        </div>
+        <button class="ex-del" onclick="deleteExtra(${r.id})">🗑</button>
+      </div>`).join('')}`;
+}
+
+function renderExtraHistory() {
+  const el = document.getElementById('extraHistory');
+  if (!el) return;
+  const rows = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const k = d.toISOString().slice(0,10);
+    const list = store.get('extra_' + k) || [];
+    const total = list.reduce((a,b) => a+b.min, 0);
+    const day = ['日','一','二','三','四','五','六'][d.getDay()];
+    rows.push({ k, day, total, list });
+  }
+  el.innerHTML = rows.map(r => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:12px;color:var(--text2);width:50px;flex-shrink:0">${r.k.slice(5)} 週${r.day}</div>
+      <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:6px;height:8px;overflow:hidden">
+        <div style="height:100%;width:${Math.min(r.total/120*100,100)}%;background:var(--green);border-radius:6px;transition:width 0.4s"></div>
+      </div>
+      <div style="font-size:12px;color:${r.total>0?'var(--green)':'var(--text2)'};width:50px;text-align:right;flex-shrink:0">${r.total > 0 ? r.total+'分' : '—'}</div>
+    </div>`).join('');
+}
+
+// ───────────────────────────────────────
 // Firebase 歷史渲染
 // ───────────────────────────────────────
 window.renderFirebaseHistory = function(history) {
@@ -752,6 +929,7 @@ function showPage(name) {
   document.getElementById('page-' + name).classList.add('active');
   document.getElementById('nav-' + name).classList.add('active');
   if (name === 'sleep') renderSleep();
+  if (name === 'extra') { renderExtraToday(); renderExtraHistory(); }
   if (name === 'notify') renderNotifList();
 }
 
