@@ -466,7 +466,7 @@
     <div class="sleep-row">
       <div class="sleep-input-group" style="flex:2">
         <label>運動項目</label>
-        <input type="text" id="extraName" placeholder="例：游泳、瑜伽、爬山" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:15px;outline:none">
+        <input type="text" id="extraName" placeholder="例：游泳、瑜伽、爬山" oninput="onExtraNameInput()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:15px;outline:none">
       </div>
       <div class="sleep-input-group" style="flex:1">
         <label>時間（分鐘）</label>
@@ -475,11 +475,12 @@
     </div>
     <div class="sleep-input-group" style="margin-bottom:10px">
       <label>強度</label>
-      <div style="display:flex;gap:8px;margin-top:6px" id="intensityBtns">
+      <div style="display:flex;gap:8px;margin-top:6px;align-items:center" id="intensityBtns">
         <button class="intensity-btn active" data-val="低" onclick="selectIntensity(this)">🟢 低強度</button>
         <button class="intensity-btn" data-val="中" onclick="selectIntensity(this)">🟡 中強度</button>
         <button class="intensity-btn" data-val="高" onclick="selectIntensity(this)">🔴 高強度</button>
       </div>
+      <div id="intensityHint" style="font-size:12px;color:var(--accent);margin-top:6px;opacity:0;transition:opacity 0.4s"></div>
     </div>
     <div class="sleep-input-group" style="margin-bottom:10px">
       <label>備註（選填）</label>
@@ -744,6 +745,38 @@ function selectIntensity(btn) {
   document.querySelectorAll('.intensity-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentIntensity = btn.dataset.val;
+}
+
+// 自動評估強度
+const INTENSITY_MAP = {
+  高: ['衝刺','間歇','HIIT','爬山','登山','籃球','足球','排球','羽球','網球','桌球','拳擊','跆拳','武術','搏擊','游泳競速','鐵人','馬拉松','競速','越野','攀岩','滑雪','衝浪','重訓','硬舉','深蹲','臥推','跳繩','踢球','踢館','踢拳','踢腿'],
+  中: ['慢跑','跑步','超慢跑','騎車','單車','自行車','游泳','有氧','舞蹈','跳舞','瑜伽流','飛輪','划船','太極','功夫','武術','快走','健走','跳','滑冰','溜冰','衝浪','划槳','皮划艇'],
+  低: ['散步','健走','伸展','拉伸','瑜伽','冥想','氣功','呼吸','按摩','緩和','修復','柔軟','平衡','靜坐','太極'],
+};
+function autoDetectIntensity(name) {
+  for (const [level, keywords] of Object.entries(INTENSITY_MAP)) {
+    if (keywords.some(k => name.includes(k))) return level;
+  }
+  return null;
+}
+function onExtraNameInput() {
+  const name = document.getElementById('extraName').value.trim();
+  if (!name) return;
+  const detected = autoDetectIntensity(name);
+  if (!detected) return;
+  // 設定強度按鈕
+  document.querySelectorAll('.intensity-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === detected);
+  });
+  currentIntensity = detected;
+  // 顯示提示
+  const hint = document.getElementById('intensityHint');
+  if (hint) {
+    const emoji = detected === '高' ? '🔴' : detected === '中' ? '🟡' : '🟢';
+    hint.textContent = `✨ 自動判斷為「${emoji} ${detected}強度」`;
+    hint.style.opacity = '1';
+    setTimeout(() => hint.style.opacity = '0', 2500);
+  }
 }
 
 function saveExtraExercise() {
